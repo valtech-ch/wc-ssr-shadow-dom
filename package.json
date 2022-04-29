@@ -1,0 +1,16 @@
+{
+  "name": "ssr-vue-wrapper-shadow-dom",
+  "version": "0.1.0",
+  "main": "src/server.js",
+  "author": "fabio.brunori@valtech.com",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.17.3",
+    "jsdom": "^19.0.0",
+    "vue": "^3.2.33"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  }
+}
