@@ -1,4 +1,11 @@
+The purpose of this repo is to demonstrate that is possible to have Frontend frameworks apps inside of webcomponents that are Server-Side-Rendered.
 
+This is done leveraging the new [Declarative Shadow Dom API](https://web.dev/declarative-shadow-dom/#polyfill).
+
+This is a follow up on [David Lorenz's article](https://itnext.io/a-deep-analysis-into-isomorphic-autonomous-cross-framework-usage-microfrontends-364271dc5fa9), which was attempting to do the same.
+The trick here is to treat Web Components and Framework-App separately on the Server Side (the wc are not actually server side rendered as an entity but composed out of the result of the rendering of the related Framework-App).
+
+## Rehydration
 
 To put a Vue component in a shadow DOM we need the following:
 1. make it compile into a native `<template shadowroot="open">` element
@@ -45,7 +52,7 @@ and render (on Server Side) as
 ```html
 <template shadowroot="open"><button><slot></slot> 1</button></template>
 ```
-if we execute this we're now incurring onto a problem: `Hydration node mismatch`. This happens becouse of our client-side web-component logic:
+if we execute this we're now incurring onto a problem: `Hydration node mismatch`. This happens because of our client-side web-component logic:
 
 ```js
 customElements.define('app-example', class extends HTMLElement {
@@ -64,7 +71,7 @@ what about the `<template>`?
 from the [declarative shadow dom documentation](https://web.dev/declarative-shadow-dom/):
 > A template element with the shadowroot attribute is detected by the HTML parser and immediately applied as the shadow root of its parent element.
 
-that means that the `<template>` element won't be serialized by the parent element's `innerHTML` nor by the shadowroot's. (Vue does not use, by the time of writing, the new `getInnerHTML({ includeShadowRoots: true })` API)
+that means that the `<template>` element won't be serialized by the parent element's `innerHTML` nor by the shadowroot's. (Vue does not use, at the time of writing, the new `getInnerHTML({ includeShadowRoots: true })` API)
 
 To solve this, we could simply remove the `<shadow-template-factory>` from the component and add the `<template>` tag later after the rendering:
 
@@ -80,7 +87,7 @@ res.send(`
 ...someother html
 ```
 
-now the outcome of the SSR is `<button><slot></slot> 1</button>` that is exactly the outcome of `this.shadowRoot.innedHTML`.
+now the outcome of the SSR is `<button><slot></slot> 1</button>` that is exactly the outcome of `this.shadowRoot.innedHTML` (rehydration works).
 
 ## Back to the main problem
 
@@ -110,16 +117,16 @@ One of the first things we could think of is to use Vue or some framework to han
 This creates quite the number of issues (eg. how to handle frameworks in frameworks or how to make vue render tags with the same name as known vue components.. see infinite loop problem in [David Lorenz's article](https://itnext.io/a-deep-analysis-into-isomorphic-autonomous-cross-framework-usage-microfrontends-364271dc5fa9))
 
 Looking at the two code slices above something pops up immediately: considering the DOM tree from that html, the transition between the 2 states (before and after the Vue app's SSR) is pretty simple:
-1. store the children somewhere
+1. store the children (slotted content) somewhere
 2. set the rendered part as children of `<app-example>`
 3. find the `<slot>` in the rendered part
 4. attach the stored children to the slot.
 
-on a note: we can safely assume that if we can't find the `<slot>` inside the rendered part it means that the Vue app doesn't want to render it's children.
+on a note: we can assume that if we can't find the `<slot>` inside the rendered part it means that the Vue app doesn't want to render it's children.
 
 Following this we can leverage the use of [jsdom](https://github.com/jsdom/jsdom) as follows:
 1. get the html from the source
-2. get the config about which web component to be rendered how
+2. get some config about which web component to be rendered how
 3. parse the html into a virtual DOM
 4. traverse each node in the vDOM and create a parallel tree top-to-bottom:
     - if the node is a text node, just clone it.
@@ -159,7 +166,7 @@ export async function getPageFromCMS() {
     `)
 }
 ```
-nothing to shavvy here, we're simulating some async source for the basic HTML. Now let's see how the config should look like:
+nothing complicated here, we're simulating some async source for the basic HTML. Now let's see how the config should look like:
 ```js
 async function renderVue3(create) {
     const app = create();
@@ -181,13 +188,16 @@ We need 3 main info: the name of the tag (used as key to have direct access), th
 now as of the general logic: we'll have
 ```js
 export async function convertRawHTMLToDOMTree(htmlAsText) {
+    // get CMS content
     const docu = new DOMParser().parseFromString(
         htmlAsText,
         "application/xml"
     ).documentElement;
 
+    // SSR it (as DOM tree)
     const parsedTree = await generateDomTree(docu);
 
+    // Ship it
     return parsedTree.innerHTML;
 }
 ```
