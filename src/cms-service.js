@@ -1,5 +1,6 @@
 import * as jsdom from 'jsdom';
 import { createCmpButtonApp } from '../lib/vue3/components/cmp-button.js';
+import { createCmpContainerApp } from '../lib/vue3/components/cmp-container.js';
 import { renderVue3 } from '../lib/vue3/renderer.js';
 
 const { JSDOM } = jsdom
@@ -23,7 +24,9 @@ export async function getPageFromCMS() {
         <script type="module" src="/lib/vue3/client.js"></script>
       </head>
       <body>
-        <cmp-button id="app">Mario</cmp-button>
+        <cmp-container title-color="blue">
+            <cmp-button id="app">Mario</cmp-button>
+        </cmp-container>
       </body>
     </html>
     `)
@@ -33,6 +36,10 @@ export async function getPageFromCMS() {
 const componentToRendererMap = {
     'cmp-button': {
         createApp: createCmpButtonApp,
+        render: renderVue3
+    },
+    'cmp-container': {
+        createApp: createCmpContainerApp,
         render: renderVue3
     }
 };
@@ -56,7 +63,7 @@ async function generateDomTree(node, parent) {
     } else if (componentToRendererMap[nodeName]) {
         // put SSR here
         const { createApp, render } = componentToRendererMap[nodeName];
-        const renderedHTML = await render(createApp);
+        const renderedHTML = await render(createApp, node.attributes);
 
         console.log('rendered vue app from web component:', nodeName, renderedHTML);
 
