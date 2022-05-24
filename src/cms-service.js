@@ -1,15 +1,11 @@
 import * as jsdom from 'jsdom';
-import { renderToString } from 'vue/server-renderer'
-import { createApp } from './app.js'
+import { createCmpButtonApp } from '../lib/vue3/components/cmp-button.js';
+import { renderVue3 } from '../lib/vue3/renderer.js';
 
 const { JSDOM } = jsdom
 const DOM = new JSDOM();
 global.DOMParser = DOM.window.DOMParser;
 global.document = DOM.window.document;
-
-function wrapAsShadowDOM(html) {
-    return `<template shadowroot="open">${html}</template>`;
-}
 
 export async function getPageFromCMS() {
     return Promise.resolve(`
@@ -24,26 +20,20 @@ export async function getPageFromCMS() {
     }
   }
         </script>
-        <script type="module" src="/src/client.js"></script>
+        <script type="module" src="/lib/vue3/client.js"></script>
       </head>
       <body>
-        <app-example id="app">Mario</app-example>
+        <cmp-button id="app">Mario</cmp-button>
       </body>
     </html>
     `)
 }
 
-async function renderVue3(create) {
-    const app = create();
-    const html = await renderToString(app);
-
-    return wrapAsShadowDOM(html);
-}
 
 const componentToRendererMap = {
-    'app-example': {
-        createApp,
-        render: renderVue3 
+    'cmp-button': {
+        createApp: createCmpButtonApp,
+        render: renderVue3
     }
 };
 
