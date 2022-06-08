@@ -333,7 +333,157 @@ global.DOMParser = DOM.window.DOMParser
 global.document = DOM.window.document
 ```
 
-Final note:
+## Adding new components
+We manage to SSR some Web Component (not really but close enough) and successfully re-hydrate the app within it. Now we want to know if this can scale up to a whole page full of these Apps.
+To Add a new component definition we need to do 2 things:
+
+1. add the web component code for the client.
+2. implement the component :D
+
+then we'll be ready for when our html source will pass us the new component.
+
+let's start with 1:
+
+### Add the web component code for the client.
+
+we can generalize our web component code and simplify it's usage:
+
+```js
+function defineElement(name, createApp) {
+  customElements.define(name, class extends HTMLElement {
+    connectedCallback() {
+      const rootEl = this.shadowRoot;
+      const props = attributesToMap(this.attributes);
+
+      createApp(props).mount(rootEl);
+    }
+  });
+}
+```
+
+note the addition of `attributesToMap` and the fact that the `createApp` function accepts a parameter, more on that on next chapter.
+
+what's left then is to initialize our component: `defineElement('new-comp-name', createNewCompFunction)`
+
+2. Implement The Component
+```js
+const NewComp = ['new-comp-name', {
+  template: `
+  <div style="max-width: 720px; margin: 0 auto; box-shadow: 0px 4px 4px 2px #ddd" @click="invertTitle">
+    <div style="border-bottom: solid 1px #ccc; padding: 6px 24px">
+        <h1 :style="titleStyle">{{ title }}</h1>
+    </div>
+    <div style="padding: 24px">
+        <slot-factory></slot-factory>
+    </div>
+  </div>
+  `,
+  props: ['titleColor'],
+  data: () => ({ title: 'Some Title' }),
+  computed: {
+      titleStyle() {
+        return `color: ${this.titleColor || 'black'}`
+      }
+  },
+  methods: {
+      invertTitle() {
+        this.title = this.title === 'Some Title' ? 'Some Other Title' : 'Some Title';
+      }
+  }
+}];
+
+export function createNewCompFunction(props) {
+  const app = createSSRApp({
+    data: () => ({ titleColor: props['title-color'] }),
+    template: `<new-comp-name :titleColor="titleColor">This Will be ignored since there's no Vue slot in the template of new-comp-name</new-comp-name>`
+  });
+
+  app.component(...SlotFactory);
+  app.component(...NewComp);
+
+  return app;
+}
+```
+
+nothing much going on here, just a little interaction to make sure rehydration works and some styling to have it clearly visible on screen.
+
+Note that we added a parameter `titleColor`. More on that on next chapter.
+
+We can now update our mock html including this
+
+```html
+<new-comp-name title-color="blue">
+  <app-example id="app">Mario</app-example>
+</new-comp-name>
+```
+
+restart the server and see with satisfaction that it works.
+
+## Parameters
+The only way we have to introduce parameters in the apps is to add attributes in the html (see example above). In order to add them to the App we need to collect the attributes (note that the _snake-case_ is needed as html wants lower-case characters for attribute names.) and pass them as props.
+
+Instead of making an automatic case conversion, the attributes are mapped manually when creating the app to the props of the specific component. this could be done differently and I know, so please don't judge me.
+
+We of course need to make sure to get them both when SSR-ing and when re-hydrating.
+
+## Using React:
+React is (in theory) ingeneered to be used in Micro-Frontend architectures. This holds true if you stick with it for the whole architecture (mounting react pieces in a react orchestrator). In the moment we want to have some other framework nested in a React app or a totally different React app things get complicated.
+
+> To prevent React from touching the DOM after mounting, we will return an empty `<div />` from the render() method. The `<div />` element has no properties or children, so React has no reason to update it, leaving the jQuery plugin free to manage that part of the DOM.
+
+From the official documentation, this is the intended way to have multiple frameworks working with React. Seems easy then? well, we have SSR and apparently Re-hydration expects a certain app to not have anything past its point. This means that any content inside the `<slot />` will be considered unexpected and Re-hydration will fail (duplicate HTML FTW :)
+
+Things we can take away from [this](https://reactjs.org/docs/integrating-with-other-libraries.html):
+- we want to have a react component that only renders the `<slot />` so it'll never re-render and thus care about what's happening below it.
+- to avoid memory leaks, we should unmount all the apps below a component when this gets unmounted; some mechanism is required to do this.
+
+Othwerwise, the only issue we have related to Re-hydration is to make React not know about any children.
+
+To do that we need to implement our client component maker a bit differently than how done for Vue:
+```javascript
+function defineReactElement(name, createFn) {
+  customElements.define(name, class extends HTMLElement {
+    connectedCallback() {
+      const rootEl = this.shadowRoot;
+
+      const props = attributesToMap(this.attributes);
+      // detach anything under <slot> and reattach it after mounting the app
+
+      const slot = rootEl.querySelector('slot');
+      if (slot) {
+        const passthroughChildren = Array.from(slot.childNodes);
+        passthroughChildren.forEach(el => {
+          slot.removeChild(el);
+        });
+        ReactDOM.hydrateRoot(rootEl, createFn(props));
+        setTimeout(() => {
+          // leave time to react to make the rendering
+          passthroughChildren.forEach(el => slot.appendChild(el));
+        });
+      } else {
+        ReactDOM.hydrateRoot(rootEl, createFn(props));
+      }
+    }
+  });
+}
+```
+once this issue is solved, the rest of React setup is very straightforward.
+
+## Note on Nesting Apps and Re-hydration
+For rehydration to work the SSRed string needs to be the same as the innerHTML of the App we want to re-hydrate.
+
+In this case the SSRed string of each App doesn't really include the sub-apps. Right?
+
+Wait a minute. How do Vue know what was on the server? - Quick answer it doesn't.
+
+The string it can compare agains in nothing else than the page source, which includes the sub-Apps after the SSR.
+
+This means that the Re-hydrator will see the current big innerHTML and compare to exactly the same big innerHTML coming from the source page.
+
+Conclusion is: Nesting works out of the box.
+
+
+## Final note:
 
 At the time of writing, only Chromium supports [Declarative Shadow DOM](https://web.dev/declarative-shadow-dom/). This should be fine for SEO but for Safari and Firefox a [polyfill](https://web.dev/declarative-shadow-dom/#polyfill) should be used.
 

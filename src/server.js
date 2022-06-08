@@ -6,12 +6,15 @@ const server = express()
 server.get('/', async (req, res) => {
 
     const htmlFromCMS = await getPageFromCMS();
+    try {
+      const rendered = await convertRawHTMLToDOMTree(htmlFromCMS);
+      console.log('rendered', rendered);
+      res.send(rendered);
+    } catch (e) {
+      res.send(e);
+    }
 
-    const rendered = await convertRawHTMLToDOMTree(htmlFromCMS);
 
-    console.log('rendered', rendered);
-
-    res.send(rendered);
 });
 
 server.use(express.static('.'))

@@ -1,4 +1,6 @@
 import * as jsdom from 'jsdom';
+import { CmpHeader } from '../lib/react/components/cmp-header.js';
+import { renderReact } from '../lib/react/renderer.js';
 import { createCmpButtonApp } from '../lib/vue3/components/cmp-button.js';
 import { createCmpContainerApp } from '../lib/vue3/components/cmp-container.js';
 import { renderVue3 } from '../lib/vue3/renderer.js';
@@ -14,16 +16,22 @@ export async function getPageFromCMS() {
     <html>
       <head>
         <title>Vue SSR Example</title>
+        <script crossorigin="true" src="https://unpkg.com/react@18/umd/react.development.js"></script>
+        <script crossorigin="true" src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
         <script type="importmap">
   {
     "imports": {
-        "vue": "https://cdnjs.cloudflare.com/ajax/libs/vue/3.0.0-beta.15/vue.esm-browser.js"
+        "vue": "https://cdnjs.cloudflare.com/ajax/libs/vue/3.0.0-beta.15/vue.esm-browser.js",
+        "react": "https://unpkg.com/react@18/umd/react.development.js",
+        "react-dom": "https://unpkg.com/react-dom@18/umd/react-dom.development.js"
     }
   }
         </script>
         <script type="module" src="/lib/vue3/client.js"></script>
+        <script type="module" src="/lib/react/client.js"></script>
       </head>
       <body>
+        <cmp-header>Some passthrough contents and a vue app: <cmp-button>Another Counter button</cmp-button></cmp-header>
         <cmp-container title-color="blue">
             <cmp-button id="app">Mario</cmp-button>
         </cmp-container>
@@ -41,6 +49,10 @@ const componentToRendererMap = {
     'cmp-container': {
         createApp: createCmpContainerApp,
         render: renderVue3
+    },
+    'cmp-header': {
+        createApp: CmpHeader,
+        render: renderReact
     }
 };
 
@@ -65,7 +77,7 @@ async function generateDomTree(node, parent) {
         const { createApp, render } = componentToRendererMap[nodeName];
         const renderedHTML = await render(createApp, node.attributes);
 
-        console.log('rendered vue app from web component:', nodeName, renderedHTML);
+        console.log('rendered app from web component:', nodeName, renderedHTML);
 
         newElement = document.createElement(nodeName);
 
